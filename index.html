@@ -40,6 +40,9 @@
         .card-back {
             transform: rotateY(180deg);
         }
+        .definition-text {
+            white-space: pre-line;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -61,10 +64,7 @@
                 </div>
 
                 <div class="flex mb-4">
-                    <select id="category-filter" class="flex-1 p-2 border rounded focus:outline-none focus:ring focus:border-blue-300">
-                        <option value="">All Categories</option>
-                    </select>
-                    <button id="study-button" class="ml-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded">
+                    <button id="study-button" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded">
                         Study Mode
                     </button>
                 </div>
@@ -103,22 +103,7 @@
                     
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Definition</label>
-                        <input type="text" id="definition-input" class="mt-1 block w-full p-2 border rounded focus:outline-none focus:ring focus:border-blue-300">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Examples (one per line)</label>
-                        <textarea id="examples-input" class="mt-1 block w-full p-2 border rounded focus:outline-none focus:ring focus:border-blue-300" rows="3"></textarea>
-                        <div class="flex justify-end mt-1">
-                            <button id="get-examples-button" class="text-sm text-blue-500 hover:text-blue-700">
-                                Find Example Sentences
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Category</label>
-                        <input type="text" id="category-input" class="mt-1 block w-full p-2 border rounded focus:outline-none focus:ring focus:border-blue-300" placeholder="e.g., household, work, emotions">
+                        <textarea id="definition-input" class="mt-1 block w-full p-2 border rounded focus:outline-none focus:ring focus:border-blue-300" rows="12"></textarea>
                     </div>
                     
                     <div class="flex space-x-2 pt-2">
@@ -148,19 +133,7 @@
                     
                     <div>
                         <h3 class="text-sm font-medium text-gray-700">Definition:</h3>
-                        <p id="detail-definition">Definition goes here</p>
-                    </div>
-                    
-                    <div>
-                        <h3 class="text-sm font-medium text-gray-700">Examples:</h3>
-                        <ul id="detail-examples" class="list-disc pl-5">
-                            <!-- Examples will go here -->
-                        </ul>
-                    </div>
-                    
-                    <div>
-                        <h3 class="text-sm font-medium text-gray-700">Category:</h3>
-                        <p id="detail-category">Category</p>
+                        <p id="detail-definition" class="definition-text">Definition goes here</p>
                     </div>
                     
                     <div class="text-right pt-4">
@@ -189,8 +162,7 @@
                             <div id="card-front" class="text-2xl font-bold">Click to start</div>
                             <div id="card-back" class="hidden">
                                 <div id="study-korean" class="text-xl mb-2"></div>
-                                <div id="study-definition" class="text-sm mb-2"></div>
-                                <div id="study-examples" class="text-xs text-gray-600"></div>
+                                <div id="study-definition" class="text-sm mb-2 definition-text"></div>
                             </div>
                         </div>
                         
@@ -208,20 +180,184 @@
         </div>
     </div>
 
+    <!-- Firebase SDKs - Load these first -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+    <!-- Main app script -->
     <script>
+        // Firebase configuration - must be defined before using Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyD3gwKSeNr7_F11JdCoAUve2SieZVN5giA",
+            authDomain: "vocab-daf44.firebaseapp.com",
+            projectId: "vocab-daf44",
+            storageBucket: "vocab-daf44.appspot.com",
+            messagingSenderId: "178558863201",
+            appId: "1:178558863201:web:98738c7c088e90c9206720",
+            measurementId: "G-R78M7WGRSC"
+        };
 
-	// WordsAPI Key
-    	const WORDS_API_KEY = "728032bd06msh52c0428ce9e3d15p1cd770jsn58b38971cf67";
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
 
+        // Authentication setup
+        function setupAuth() {
+            // Add a simple anonymous authentication for users
+            auth.signInAnonymously()
+                .then(() => {
+                    console.log("Signed in anonymously");
+                })
+                .catch((error) => {
+                    console.error("Anonymous auth error:", error);
+                });
+            
+            // Listen for auth state changes
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    console.log("User is signed in with ID:", user.uid);
+                    // After authentication, load words
+                    loadWordsFromFirebase();
+                } else {
+                    console.log("User is signed out");
+                }
+            });
+        }
+
+        // Load words from Firebase
+        function loadWordsFromFirebase() {
+            const user = auth.currentUser;
+            if (!user) return;
+            
+            db.collection('users').doc(user.uid).collection('words')
+                .orderBy('dateAdded', 'desc')
+                .get()
+                .then((snapshot) => {
+                    if (snapshot.empty) {
+                        console.log('No words found in database');
+                        // If no words, use initial sample words
+                        addSampleWordsToFirebase();
+                        return;
+                    }
+                    
+                    // Clear existing words array
+                    words = [];
+                    
+                    // Add words from Firebase to the words array
+                    snapshot.forEach(doc => {
+                        const wordData = doc.data();
+                        words.push({
+                            id: doc.id,
+                            english: wordData.english,
+                            korean: wordData.korean,
+                            definition: wordData.definition,
+                            dateAdded: wordData.dateAdded
+                        });
+                    });
+                    
+                    // Render the updated word list
+                    renderWordList();
+                })
+                .catch((error) => {
+                    console.error("Error loading words:", error);
+                    // Fallback to localStorage
+                    words = JSON.parse(localStorage.getItem('vocabularyWords') || '[]');
+                    renderWordList();
+                });
+        }
+
+        // Add sample words to Firebase
+        function addSampleWordsToFirebase() {
+            const user = auth.currentUser;
+            if (!user) return;
+            
+            const sampleWords = [
+                {
+                    english: 'appreciate',
+                    korean: '감사하다',
+                    definition: 'Definition 1: to recognize the full worth of something\nSynonym: value, acknowledge\nExample: I appreciate your help\n\nDefinition 2: to increase in value\nSynonym: grow, rise\nExample: The property has appreciated over time',
+                    dateAdded: new Date().toISOString()
+                },
+                {
+                    english: 'refrigerator',
+                    korean: '냉장고',
+                    definition: 'Definition 1: an appliance for keeping food cold\nSynonym: fridge, cooler\nExample: The milk is in the refrigerator',
+                    dateAdded: new Date().toISOString()
+                }
+            ];
+            
+            // Add each sample word to Firebase
+            const batch = db.batch();
+            sampleWords.forEach((word) => {
+                const newWordRef = db.collection('users').doc(user.uid).collection('words').doc();
+                batch.set(newWordRef, word);
+            });
+            
+            // Commit the batch
+            batch.commit()
+                .then(() => {
+                    console.log("Sample words added to Firebase");
+                    loadWordsFromFirebase();
+                })
+                .catch((error) => {
+                    console.error("Error adding sample words:", error);
+                });
+        }
+
+        // Save word to Firebase
+        function saveWordToFirebase(word) {
+            const user = auth.currentUser;
+            if (!user) {
+                console.error("No user signed in");
+                return Promise.reject("No user signed in");
+            }
+            
+            if (word.id && typeof word.id === 'string' && word.id.length > 10) { // Existing Firebase word
+                // Update existing word
+                return db.collection('users').doc(user.uid).collection('words').doc(word.id)
+                    .update({
+                        english: word.english,
+                        korean: word.korean,
+                        definition: word.definition
+                    });
+            } else {
+                // New word
+                const wordData = {
+                    english: word.english,
+                    korean: word.korean,
+                    definition: word.definition,
+                    dateAdded: new Date().toISOString()
+                };
+                
+                return db.collection('users').doc(user.uid).collection('words').add(wordData)
+                    .then((docRef) => {
+                        word.id = docRef.id; // Update the word's ID with Firebase document ID
+                        return word;
+                    });
+            }
+        }
+
+        // Delete word from Firebase
+        function deleteWordFromFirebase(wordId) {
+            const user = auth.currentUser;
+            if (!user) return Promise.reject("No user signed in");
+            
+            return db.collection('users').doc(user.uid).collection('words').doc(wordId).delete();
+        }
+
+        // WordsAPI Key
+        const WORDS_API_KEY = "728032bd06msh52c0428ce9e3d15p1cd770jsn58b38971cf67";
+        
         // Main app logic
         document.addEventListener('DOMContentLoaded', function() {
             // State management
-            let words = JSON.parse(localStorage.getItem('vocabularyWords') || '[]');
+            let words = [];  // Initialize empty, will be loaded from Firebase
             let currentView = 'list';
             let currentWordId = null;
             let studyIndex = 0;
             let studyWords = [];
-            let categorySet = new Set();
             let isEditing = false;
 
             // Local dictionary data - a small sample for common words
@@ -250,56 +386,6 @@
                     definition: "To be desired or approved of; having the required qualities.",
                     korean: "좋은",
                     examples: ["The food was very good.", "She's a good teacher."]
-                },
-                "bad": {
-                    definition: "Of poor quality or a low standard.",
-                    korean: "나쁜",
-                    examples: ["The movie was really bad.", "I had a bad experience there."]
-                },
-                "yes": {
-                    definition: "Used to give an affirmative response.",
-                    korean: "예",
-                    examples: ["Yes, I agree with you.", "Yes, I'll be there."]
-                },
-                "no": {
-                    definition: "Used to give a negative response.",
-                    korean: "아니오",
-                    examples: ["No, I don't want to go.", "No, that's not correct."]
-                },
-                "food": {
-                    definition: "Any nutritious substance that people or animals eat or drink.",
-                    korean: "음식",
-                    examples: ["The food here is excellent.", "We need to buy more food."]
-                },
-                "water": {
-                    definition: "A colorless, transparent, odorless liquid that forms the seas, lakes, rivers, and rain.",
-                    korean: "물",
-                    examples: ["Can I have a glass of water?", "The plant needs water."]
-                },
-                "happy": {
-                    definition: "Feeling or showing pleasure or contentment.",
-                    korean: "행복한",
-                    examples: ["She looks very happy.", "I'm happy to help you."]
-                },
-                "sad": {
-                    definition: "Feeling or showing sorrow; unhappy.",
-                    korean: "슬픈",
-                    examples: ["He felt sad after his dog died.", "It's a sad story."]
-                },
-                "time": {
-                    definition: "The indefinite continued progress of existence and events in the past, present, and future.",
-                    korean: "시간",
-                    examples: ["What time is it?", "I don't have time today."]
-                },
-                "day": {
-                    definition: "A period of 24 hours as a unit of time.",
-                    korean: "날",
-                    examples: ["It's a beautiful day.", "I work five days a week."]
-                },
-                "night": {
-                    definition: "The period of darkness in each 24 hours.",
-                    korean: "밤",
-                    examples: ["I couldn't sleep last night.", "We're going out tonight."]
                 }
             };
 
@@ -312,7 +398,6 @@
             // DOM elements - list view
             const wordList = document.getElementById('word-list');
             const searchInput = document.getElementById('search-input');
-            const categoryFilter = document.getElementById('category-filter');
             const addButton = document.getElementById('add-button');
             const studyButton = document.getElementById('study-button');
 
@@ -320,21 +405,16 @@
             const englishInput = document.getElementById('english-input');
             const koreanInput = document.getElementById('korean-input');
             const definitionInput = document.getElementById('definition-input');
-            const examplesInput = document.getElementById('examples-input');
-            const categoryInput = document.getElementById('category-input');
             const saveButton = document.getElementById('save-button');
             const cancelAddButton = document.getElementById('cancel-add-button');
             const lookupEnglishButton = document.getElementById('lookup-english-button');
             const lookupKoreanButton = document.getElementById('lookup-korean-button');
-            const getExamplesButton = document.getElementById('get-examples-button');
             const lookupStatus = document.getElementById('lookup-status');
 
             // DOM elements - detail view
             const detailEnglish = document.getElementById('detail-english');
             const detailKorean = document.getElementById('detail-korean');
             const detailDefinition = document.getElementById('detail-definition');
-            const detailExamples = document.getElementById('detail-examples');
-            const detailCategory = document.getElementById('detail-category');
             const backButton = document.getElementById('back-button');
             const editButton = document.getElementById('edit-button');
             const deleteButton = document.getElementById('delete-button');
@@ -345,7 +425,6 @@
             const cardBack = document.getElementById('card-back');
             const studyKorean = document.getElementById('study-korean');
             const studyDefinition = document.getElementById('study-definition');
-            const studyExamples = document.getElementById('study-examples');
             const prevCardButton = document.getElementById('prev-card');
             const nextCardButton = document.getElementById('next-card');
             const exitStudyButton = document.getElementById('exit-study-button');
@@ -365,70 +444,17 @@
             prevCardButton.addEventListener('click', () => moveCard(-1));
             nextCardButton.addEventListener('click', () => moveCard(1));
             exitStudyButton.addEventListener('click', showListView);
-            categoryFilter.addEventListener('change', renderWordList);
             lookupEnglishButton.addEventListener('click', lookupEnglishWord);
             lookupKoreanButton.addEventListener('click', lookupKoreanTranslation);
-            getExamplesButton.addEventListener('click', getExampleSentences);
             editButton.addEventListener('click', editCurrentWord);
             
             // Functions
             function initialize() {
-                // Add sample words if none exist
-                if (words.length === 0) {
-                    words = [
-                        {
-                            id: 1,
-                            english: 'appreciate',
-                            korean: '감사하다',
-                            definition: 'to recognize the full worth of something',
-                            examples: ['I appreciate your help', 'We appreciate good food more when we\'re hungry'],
-                            category: 'emotions',
-                            dateAdded: new Date().toISOString()
-                        },
-                        {
-                            id: 2,
-                            english: 'refrigerator',
-                            korean: '냉장고',
-                            definition: 'an appliance for keeping food cold',
-                            examples: ['The milk is in the refrigerator', 'We need a new refrigerator'],
-                            category: 'household',
-                            dateAdded: new Date().toISOString()
-                        }
-                    ];
-                    saveWordsToStorage();
-                }
-
-                // Update category filter
-                updateCategoryFilter();
-
-                // Render the word list
-                renderWordList();
+                // Set up authentication first, which will trigger word loading
+                setupAuth();
                 
                 // Start at list view
                 showView('list');
-            }
-
-            function updateCategoryFilter() {
-                // Clear existing options except the first one
-                while (categoryFilter.options.length > 1) {
-                    categoryFilter.remove(1);
-                }
-
-                // Get unique categories
-                categorySet.clear();
-                words.forEach(word => {
-                    if (word.category) {
-                        categorySet.add(word.category);
-                    }
-                });
-
-                // Add categories to filter
-                Array.from(categorySet).sort().forEach(category => {
-                    const option = document.createElement('option');
-                    option.value = category;
-                    option.textContent = category;
-                    categoryFilter.appendChild(option);
-                });
             }
 
             function showView(viewName) {
@@ -464,8 +490,6 @@
                 englishInput.value = '';
                 koreanInput.value = '';
                 definitionInput.value = '';
-                examplesInput.value = '';
-                categoryInput.value = '';
                 
                 showView('add');
                 englishInput.focus();
@@ -478,17 +502,7 @@
                 if (word) {
                     detailEnglish.textContent = word.english;
                     detailKorean.textContent = word.korean;
-                    detailDefinition.textContent = word.definition;
-                    
-                    // Clear and rebuild examples list
-                    detailExamples.innerHTML = '';
-                    word.examples.forEach(example => {
-                        const li = document.createElement('li');
-                        li.textContent = example;
-                        detailExamples.appendChild(li);
-                    });
-                    
-                    detailCategory.textContent = word.category || 'Uncategorized';
+                    detailDefinition.textContent = word.definition || 'No definition available';
                 }
                 
                 showView('detail');
@@ -503,9 +517,7 @@
                 
                 englishInput.value = word.english;
                 koreanInput.value = word.korean;
-                definitionInput.value = word.definition;
-                examplesInput.value = word.examples.join('\n');
-                categoryInput.value = word.category || '';
+                definitionInput.value = word.definition || '';
                 
                 showView('add');
             }
@@ -514,57 +526,82 @@
                 const english = englishInput.value.trim();
                 const korean = koreanInput.value.trim();
                 const definition = definitionInput.value.trim();
-                const examplesText = examplesInput.value.trim();
-                const category = categoryInput.value.trim();
                 
-                if (!english || !definition) {
-                    alert('English word and definition are required!');
+                if (!english) {
+                    alert('English word is required!');
                     return;
                 }
                 
-                const examples = examplesText.split('\n')
-                    .map(ex => ex.trim())
-                    .filter(ex => ex.length > 0);
+                let wordToSave;
                 
                 if (isEditing) {
                     // Update existing word
                     const index = words.findIndex(w => w.id === currentWordId);
                     if (index !== -1) {
-                        words[index] = {
+                        wordToSave = {
                             ...words[index],
                             english,
                             korean,
-                            definition,
-                            examples,
-                            category,
+                            definition
                         };
                     }
                 } else {
                     // Add new word
-                    const newWord = {
-                        id: Date.now(),
+                    wordToSave = {
+                        id: Date.now().toString(), // Temporary ID until Firebase assigns a document ID
                         english,
                         korean,
                         definition,
-                        examples,
-                        category,
                         dateAdded: new Date().toISOString()
                     };
-                    
-                    words.push(newWord);
                 }
                 
-                saveWordsToStorage();
-                updateCategoryFilter();
-                showListView();
+                // Save to Firebase
+                saveWordToFirebase(wordToSave)
+                    .then(() => {
+                        // Reload words from Firebase
+                        loadWordsFromFirebase();
+                        // Go back to list view
+                        showListView();
+                    })
+                    .catch((error) => {
+                        console.error("Error saving word:", error);
+                        alert("Failed to save word. Check console for details.");
+                        
+                        // Fallback to localStorage
+                        if (isEditing) {
+                            const index = words.findIndex(w => w.id === currentWordId);
+                            if (index !== -1) {
+                                words[index] = wordToSave;
+                            }
+                        } else {
+                            words.push(wordToSave);
+                        }
+                        saveWordsToStorage();
+                        showListView();
+                    });
             }
 
             function deleteCurrentWord() {
                 if (confirm('Are you sure you want to delete this word?')) {
-                    words = words.filter(w => w.id !== currentWordId);
-                    saveWordsToStorage();
-                    updateCategoryFilter();
-                    showListView();
+                    deleteWordFromFirebase(currentWordId)
+                        .then(() => {
+                            // Remove from local array
+                            words = words.filter(w => w.id !== currentWordId);
+                            // Update localStorage as backup
+                            saveWordsToStorage();
+                            // Show list view
+                            showListView();
+                        })
+                        .catch((error) => {
+                            console.error("Error deleting word:", error);
+                            alert("Failed to delete word. Check console for details.");
+                            
+                            // Fallback to just removing from localStorage
+                            words = words.filter(w => w.id !== currentWordId);
+                            saveWordsToStorage();
+                            showListView();
+                        });
                 }
             }
 
@@ -574,18 +611,12 @@
 
             function renderWordList() {
                 const searchTerm = searchInput.value.toLowerCase();
-                const categoryValue = categoryFilter.value;
                 
-                // Filter words based on search term and category
+                // Filter words based on search term
                 const filteredWords = words.filter(word => {
-                    const matchesSearch = 
-                        word.english.toLowerCase().includes(searchTerm) ||
-                        word.korean.includes(searchTerm) ||
-                        word.definition.toLowerCase().includes(searchTerm);
-                    
-                    const matchesCategory = !categoryValue || word.category === categoryValue;
-                    
-                    return matchesSearch && matchesCategory;
+                    return word.english.toLowerCase().includes(searchTerm) ||
+                           (word.korean && word.korean.includes(searchTerm)) ||
+                           (word.definition && word.definition.toLowerCase().includes(searchTerm));
                 });
                 
                 // Sort by most recently added
@@ -601,15 +632,25 @@
                         card.className = 'bg-white p-3 rounded shadow word-card cursor-pointer';
                         card.addEventListener('click', () => showDetailView(word.id));
                         
+                        // Extract first definition line for display
+                        let shortDefinition = word.definition || '';
+                        const defMatch = shortDefinition.match(/Definition 1: ([^\n]+)/);
+                        if (defMatch && defMatch[1]) {
+                            shortDefinition = defMatch[1];
+                        } else {
+                            // If no match, just take the first line or part of it
+                            shortDefinition = shortDefinition.split('\n')[0];
+                            if (shortDefinition.length > 60) {
+                                shortDefinition = shortDefinition.substring(0, 57) + '...';
+                            }
+                        }
+                        
                         card.innerHTML = `
                             <div class="flex justify-between">
                                 <h2 class="font-bold">${word.english}</h2>
                                 <span class="text-gray-600">${word.korean || ''}</span>
                             </div>
-                            <p class="text-sm text-gray-600 truncate">${word.definition}</p>
-                            <div class="text-xs text-gray-500 mt-1">
-                                Category: ${word.category || 'Uncategorized'}
-                            </div>
+                            <p class="text-sm text-gray-600 truncate">${shortDefinition}</p>
                         `;
                         
                         wordList.appendChild(card);
@@ -624,11 +665,8 @@
             }
 
             function startStudyMode() {
-                // Only use words that match the current category filter
-                const categoryValue = categoryFilter.value;
-                studyWords = categoryValue ? 
-                    words.filter(word => word.category === categoryValue) : 
-                    [...words];
+                // Use all words for study
+                studyWords = [...words];
                 
                 // Shuffle the words for study
                 studyWords.sort(() => Math.random() - 0.5);
@@ -653,23 +691,8 @@
                 
                 const word = studyWords[studyIndex];
                 cardFront.textContent = word.english;
-                studyKorean.textContent = word.korean;
-                studyDefinition.textContent = word.definition;
-                
-                // Update examples
-                studyExamples.innerHTML = '';
-                if (word.examples.length > 0) {
-                    const examplesList = document.createElement('ul');
-                    examplesList.className = 'text-left list-disc pl-4';
-                    
-                    word.examples.forEach(example => {
-                        const li = document.createElement('li');
-                        li.textContent = example;
-                        examplesList.appendChild(li);
-                    });
-                    
-                    studyExamples.appendChild(examplesList);
-                }
+                studyKorean.textContent = word.korean || '(No translation)';
+                studyDefinition.textContent = word.definition || 'No definition available';
                 
                 // Reset card to front
                 cardBack.classList.add('hidden');
@@ -681,7 +704,6 @@
 
             function flipCard() {
                 if (studyWords.length === 0) return;
-                
                 cardBack.classList.toggle('hidden');
             }
 
@@ -693,162 +715,203 @@
             }
             
             // Dictionary lookup functions
-            
-		// Replace your lookupEnglishWord function with this version
-		async function lookupEnglishWord() {
-    		const word = englishInput.value.trim().toLowerCase();
-    		if (!word) return;
-    
-    // Show status
-    lookupStatus.textContent = 'Looking up word...';
-    lookupStatus.classList.remove('hidden');
-    lookupStatus.classList.remove('text-red-500');
-    lookupStatus.classList.add('text-gray-500');
-    
-    try {
-        // WordsAPI request
-        const response = await fetch(`https://wordsapiv1.p.rapidapi.com/words/${encodeURIComponent(word)}`, {
-            method: 'GET',
-            headers: {
-                'X-RapidAPI-Key': WORDS_API_KEY,
-                'X-RapidAPI-Host': 'wordsapiv1.p.rapidapi.com'
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error('API request failed');
-        }
-        
-        const data = await response.json();
-        
-        if (data && data.results && data.results.length > 0) {
-            // Get the best definition
-            const result = data.results[0];
-            definitionInput.value = result.definition;
-            
-            // Get examples if available
-            const examples = [];
-            
-            // Check for examples in the first result
-            if (result.examples && result.examples.length > 0) {
-                examples.push(...result.examples);
-            }
-            
-            // Check other results for more examples
-            if (data.results.length > 1) {
-                data.results.slice(1).forEach(res => {
-                    if (res.examples && res.examples.length > 0) {
-                        examples.push(...res.examples.slice(0, 2)); // Add up to 2 examples from each definition
-                    }
-                });
-            }
-            
-            // Update examples
-            if (examples.length > 0) {
-                examplesInput.value = examples.join('\n');
-            }
-            
-            // Success message
-            lookupStatus.textContent = 'Definition found!';
-            lookupStatus.classList.remove('text-gray-500');
-            lookupStatus.classList.add('text-green-500');
-            
-            // Try to get Korean translation
-            lookupKoreanTranslation();
-        } else {
-            throw new Error('No definition found');
-        }
-    } catch (error) {
-        console.error('WordsAPI lookup error:', error);
-        
-        // Try fallback to free Dictionary API
-        try {
-            const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-            
-            if (response.ok) {
-                const data = await response.json();
+            async function lookupEnglishWord() {
+                const word = englishInput.value.trim().toLowerCase();
+                if (!word) return;
                 
-                if (data && data.length > 0) {
-                    const entry = data[0];
-                    
-                    if (entry.meanings && entry.meanings.length > 0) {
-                        const meaning = entry.meanings[0];
-                        if (meaning.definitions && meaning.definitions.length > 0) {
-                            definitionInput.value = meaning.definitions[0].definition;
+                // Show status
+                lookupStatus.textContent = 'Looking up word...';
+                lookupStatus.classList.remove('hidden');
+                lookupStatus.classList.remove('text-red-500');
+                lookupStatus.classList.add('text-gray-500');
+                
+                try {
+                    // WordsAPI request
+                    const response = await fetch(`https://wordsapiv1.p.rapidapi.com/words/${encodeURIComponent(word)}`, {
+                        method: 'GET',
+                        headers: {
+                            'X-RapidAPI-Key': WORDS_API_KEY,
+                            'X-RapidAPI-Host': 'wordsapiv1.p.rapidapi.com'
                         }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('API request failed');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data && data.results && data.results.length > 0) {
+                        // Format definitions with their synonyms and examples
+                        let formattedDefinitions = [];
                         
-                        const examples = [];
-                        entry.meanings.forEach(meaning => {
-                            meaning.definitions.forEach(def => {
-                                if (def.example) {
-                                    examples.push(def.example);
-                                }
-                            });
+                        // Process up to the first 2 definitions
+                        const definitionsToProcess = data.results.slice(0, 2);
+                        
+                        definitionsToProcess.forEach((result, index) => {
+                            // Format definition with exact line breaks as requested
+                            let formattedDef = `Definition ${index + 1}: ${result.definition}`;
+                            
+                            // Add synonyms
+                            formattedDef += `\nSynonym: `;
+                            if (result.synonyms && result.synonyms.length > 0) {
+                                formattedDef += result.synonyms.slice(0, 3).join(', ');
+                            } else {
+                                formattedDef += '(none available)';
+                            }
+                            
+                            // Add examples
+                            formattedDef += `\nExample: `;
+                            if (result.examples && result.examples.length > 0) {
+                                formattedDef += result.examples[0];
+                            } else {
+formattedDef += '(none available)';
+                            }
+                            
+                            // Add to collection
+                            formattedDefinitions.push(formattedDef);
                         });
                         
-                        if (examples.length > 0) {
-                            examplesInput.value = examples.join('\n');
+                        // Set the combined definitions in the definition input with double line break between definitions
+                        definitionInput.value = formattedDefinitions.join('\n\n');
+                        
+                        // Success message
+                        lookupStatus.textContent = 'Definition found!';
+                        lookupStatus.classList.remove('text-gray-500');
+                        lookupStatus.classList.add('text-green-500');
+                        
+                        // Try to get Korean translation
+                        lookupKoreanTranslation();
+                    } else {
+                        throw new Error('No definition found');
+                    }
+                } catch (error) {
+                    console.error('WordsAPI lookup error:', error);
+                    
+                    // Try fallback to free Dictionary API
+                    try {
+                        const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            
+                            if (data && data.length > 0) {
+                                const entry = data[0];
+                                
+                                if (entry.meanings && entry.meanings.length > 0) {
+                                    const formattedDefinitions = [];
+                                    
+                                    // Process up to 2 meanings/definitions
+                                    const meaningsToProcess = entry.meanings.slice(0, 2);
+                                    
+                                    meaningsToProcess.forEach((meaning, meaningIndex) => {
+                                        if (meaning.definitions && meaning.definitions.length > 0) {
+                                            const def = meaning.definitions[0];
+                                            
+                                            // Format definition with exact line breaks as requested
+                                            let formattedDef = `Definition ${meaningIndex + 1}: ${def.definition}`;
+                                            if (meaning.partOfSpeech) {
+                                                formattedDef += ` (${meaning.partOfSpeech})`;
+                                            }
+                                            
+                                            // Add synonyms
+                                            formattedDef += `\nSynonym: `;
+                                            if (meaning.synonyms && meaning.synonyms.length > 0) {
+                                                formattedDef += meaning.synonyms.slice(0, 3).join(', ');
+                                            } else {
+                                                formattedDef += '(none available)';
+                                            }
+                                            
+                                            // Add examples
+                                            formattedDef += `\nExample: `;
+                                            if (def.example) {
+                                                formattedDef += def.example;
+                                            } else {
+                                                formattedDef += '(none available)';
+                                            }
+                                            
+                                            formattedDefinitions.push(formattedDef);
+                                        }
+                                    });
+                                    
+                                    // Set formatted definitions with double line break between definitions
+                                    definitionInput.value = formattedDefinitions.join('\n\n');
+                                }
+                                
+                                lookupStatus.textContent = 'Definition found (backup source)!';
+                                lookupStatus.classList.remove('text-gray-500');
+                                lookupStatus.classList.add('text-green-500');
+                                
+                                lookupKoreanTranslation();
+                                return;
+                            }
+                        }
+                        
+                        // If both APIs fail, check local dictionary
+                        if (localDictionary[word]) {
+                            const entry = localDictionary[word];
+                            
+                            // Format with exact line breaks as requested
+                            let formattedDef = `Definition 1: ${entry.definition}`;
+                            formattedDef += `\nSynonym: (none available)`;
+                            
+                            if (entry.examples && entry.examples.length > 0) {
+                                formattedDef += `\nExample: ${entry.examples[0]}`;
+                            } else {
+                                formattedDef += `\nExample: (none available)`;
+                            }
+                            
+                            definitionInput.value = formattedDef;
+                            
+                            if (entry.korean) {
+                                koreanInput.value = entry.korean;
+                            }
+                            
+                            lookupStatus.textContent = 'Definition found in local dictionary!';
+                            lookupStatus.classList.remove('text-gray-500');
+                            lookupStatus.classList.add('text-green-500');
+                        } else {
+                            lookupStatus.textContent = 'Definition not found.';
+                            lookupStatus.classList.remove('text-gray-500');
+                            lookupStatus.classList.add('text-red-500');
+                            generateSampleDefinition(word);
+                        }
+                    } catch (fallbackError) {
+                        console.error('Fallback lookup error:', fallbackError);
+                        lookupStatus.textContent = 'Definition not found.';
+                        lookupStatus.classList.remove('text-gray-500');
+                        lookupStatus.classList.add('text-red-500');
+                        
+                        // Try local dictionary or generate sample
+                        if (localDictionary[word]) {
+                            const entry = localDictionary[word];
+                            
+                            // Format with exact line breaks as requested
+                            let formattedDef = `Definition 1: ${entry.definition}`;
+                            formattedDef += `\nSynonym: (none available)`;
+                            
+                            if (entry.examples && entry.examples.length > 0) {
+                                formattedDef += `\nExample: ${entry.examples[0]}`;
+                            } else {
+                                formattedDef += `\nExample: (none available)`;
+                            }
+                            
+                            definitionInput.value = formattedDef;
+                            
+                            if (entry.korean) {
+                                koreanInput.value = entry.korean;
+                            }
+                        } else {
+                            generateSampleDefinition(word);
                         }
                     }
-                    
-                    lookupStatus.textContent = 'Definition found (backup source)!';
-                    lookupStatus.classList.remove('text-gray-500');
-                    lookupStatus.classList.add('text-green-500');
-                    
-                    lookupKoreanTranslation();
-                    return;
+                } finally {
+                    // Hide status after 3 seconds
+                    setTimeout(() => {
+                        lookupStatus.classList.add('hidden');
+                    }, 3000);
                 }
             }
-            
-            // If both APIs fail, check local dictionary
-            if (localDictionary[word]) {
-                const entry = localDictionary[word];
-                definitionInput.value = entry.definition;
-                if (entry.examples && entry.examples.length > 0) {
-                    examplesInput.value = entry.examples.join('\n');
-                }
-                if (entry.korean) {
-                    koreanInput.value = entry.korean;
-                }
-                
-                lookupStatus.textContent = 'Definition found in local dictionary!';
-                lookupStatus.classList.remove('text-gray-500');
-                lookupStatus.classList.add('text-green-500');
-            } else {
-                lookupStatus.textContent = 'Definition not found.';
-                lookupStatus.classList.remove('text-gray-500');
-                lookupStatus.classList.add('text-red-500');
-                generateSampleDefinition(word);
-            }
-        } catch (fallbackError) {
-            console.error('Fallback lookup error:', fallbackError);
-            lookupStatus.textContent = 'Definition not found.';
-            lookupStatus.classList.remove('text-gray-500');
-            lookupStatus.classList.add('text-red-500');
-            
-            // Try local dictionary or generate sample
-            if (localDictionary[word]) {
-                const entry = localDictionary[word];
-                definitionInput.value = entry.definition;
-                if (entry.examples && entry.examples.length > 0) {
-                    examplesInput.value = entry.examples.join('\n');
-                }
-                if (entry.korean) {
-                    koreanInput.value = entry.korean;
-                }
-            } else {
-                generateSampleDefinition(word);
-            }
-        }
-    } finally {
-        // Hide status after 3 seconds
-        setTimeout(() => {
-            lookupStatus.classList.add('hidden');
-        }, 3000);
-    }
-}
-
-
             
             function lookupKoreanTranslation() {
                 const word = englishInput.value.trim().toLowerCase();
@@ -888,64 +951,6 @@
                 }
             }
             
-            
-		async function getExampleSentences() {
-    		const word = englishInput.value.trim().toLowerCase();
-    		if (!word) return;
-    
-    		try {
-        // WordsAPI request
-        const response = await fetch(`https://wordsapiv1.p.rapidapi.com/words/${encodeURIComponent(word)}/examples`, {
-            method: 'GET',
-            headers: {
-                'X-RapidAPI-Key': WORDS_API_KEY,
-                'X-RapidAPI-Host': 'wordsapiv1.p.rapidapi.com'
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error('API request failed');
-        }
-        
-        const data = await response.json();
-        
-        if (data && data.examples && data.examples.length > 0) {
-            // Get up to 5 examples
-            const examples = data.examples.slice(0, 5);
-            
-            // Append to existing examples or set new ones
-            const currentExamples = examplesInput.value.trim();
-            examplesInput.value = currentExamples 
-                ? currentExamples + '\n' + examples.join('\n') 
-                : examples.join('\n');
-            
-            return;
-        }
-        
-        throw new Error('No examples found');
-    } catch (error) {
-        console.error('Example lookup error:', error);
-        
-        // Fall back to local dictionary or generate examples
-        if (localDictionary[word] && localDictionary[word].examples) {
-            const examples = localDictionary[word].examples;
-            
-            // Append to existing examples or set new ones
-            const currentExamples = examplesInput.value.trim();
-            examplesInput.value = currentExamples 
-                ? currentExamples + '\n' + examples.join('\n') 
-                : examples.join('\n');
-        } else {
-            // Generate examples
-            generateSampleExamples(word);
-        }
-    }
-}
-                
-                // Generate sample examples
-                generateSampleExamples(word);
-            }
-            
             // Helper functions to generate sample content when APIs aren't available
             function generateSampleDefinition(word) {
                 const definitions = {
@@ -970,14 +975,48 @@
                 };
                 
                 // Simple approach: longer words more likely to be nouns
-                let type = word.length > 8 ? 'noun' : (word.length > 5 ? 'verb' : 'adjective');
+                let type1 = word.length > 8 ? 'noun' : (word.length > 5 ? 'verb' : 'adjective');
                 
-                // Select a random definition from the appropriate type
-                const defOptions = definitions[type];
-                const definition = defOptions[Math.floor(Math.random() * defOptions.length)];
+                // Pick a different type for second definition
+                const types = ['noun', 'verb', 'adjective'];
+                const typeIndex = types.indexOf(type1);
+                const remainingTypes = types.filter((_, i) => i !== typeIndex);
+                const type2 = remainingTypes[Math.floor(Math.random() * remainingTypes.length)];
                 
-                // Set the definition in the input
-                definitionInput.value = definition;
+                // Select random definitions from the appropriate types
+                const defOptions1 = definitions[type1];
+                const definition1 = defOptions1[Math.floor(Math.random() * defOptions1.length)];
+                
+                const defOptions2 = definitions[type2];
+                const definition2 = defOptions2[Math.floor(Math.random() * defOptions2.length)];
+                
+                // Generate some sample synonyms
+                const generateSynonyms = (type) => {
+                    const synonymSets = {
+                        noun: ['item', 'object', 'thing', 'entity', 'element'],
+                        verb: ['act', 'perform', 'execute', 'do', 'conduct'],
+                        adjective: ['descriptive', 'qualifying', 'modifying', 'characterizing']
+                    };
+                    const syns = synonymSets[type];
+                    // Pick 2 random synonyms
+                    const shuffled = [...syns].sort(() => 0.5 - Math.random());
+                    return shuffled.slice(0, 2).join(', ');
+                };
+                
+                // Generate example sentences
+                const templates = [
+                    `The ${word} was particularly useful in this situation.`,
+                    `I need to ${word} before the deadline.`,
+                    `She couldn't understand the ${word} properly.`,
+                    `They decided to ${word} together.`
+                ];
+                
+                // Format with exact line breaks as requested
+                const formatted1 = `Definition 1: ${definition1}\nSynonym: ${generateSynonyms(type1)}\nExample: ${templates[0]}`;
+                const formatted2 = `Definition 2: ${definition2}\nSynonym: ${generateSynonyms(type2)}\nExample: ${templates[2]}`;
+                
+                // Set the definitions in the input with double line break between definitions
+                definitionInput.value = `${formatted1}\n\n${formatted2}`;
             }
             
             function generateSampleTranslation(word) {
@@ -995,34 +1034,6 @@
                 }
                 
                 koreanInput.value = koreanWord;
-            }
-            
-            function generateSampleExamples(word) {
-                const templates = [
-                    `The ${word} was particularly useful in this situation.`,
-                    `I need to ${word} before the deadline.`,
-                    `She couldn't understand the ${word} properly.`,
-                    `They decided to ${word} together.`,
-                    `That's a very interesting ${word}.`,
-                    `We should learn more about ${word}.`
-                ];
-                
-                // Select 2-3 random examples
-                const numExamples = 2 + Math.floor(Math.random() * 2);
-                const examples = [];
-                
-                for (let i = 0; i < numExamples; i++) {
-                    const template = templates[Math.floor(Math.random() * templates.length)];
-                    if (!examples.includes(template)) {
-                        examples.push(template);
-                    }
-                }
-                
-                // Add examples to the textarea
-                const currentExamples = examplesInput.value.trim();
-                examplesInput.value = currentExamples 
-                    ? currentExamples + '\n' + examples.join('\n') 
-                    : examples.join('\n');
             }
         });
     </script>
