@@ -180,185 +180,21 @@
         </div>
     </div>
 
-    <!-- Firebase SDKs - Load these first -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
-
-    <!-- Main app script -->
     <script>
-        // Firebase configuration - must be defined before using Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyD3gwKSeNr7_F11JdCoAUve2SieZVN5giA",
-            authDomain: "vocab-daf44.firebaseapp.com",
-            projectId: "vocab-daf44",
-            storageBucket: "vocab-daf44.appspot.com",
-            messagingSenderId: "178558863201",
-            appId: "1:178558863201:web:98738c7c088e90c9206720",
-            measurementId: "G-R78M7WGRSC"
-        };
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-
-        // Authentication setup
-        function setupAuth() {
-            // Add a simple anonymous authentication for users
-            auth.signInAnonymously()
-                .then(() => {
-                    console.log("Signed in anonymously");
-                })
-                .catch((error) => {
-                    console.error("Anonymous auth error:", error);
-                });
-            
-            // Listen for auth state changes
-            auth.onAuthStateChanged((user) => {
-                if (user) {
-                    console.log("User is signed in with ID:", user.uid);
-                    // After authentication, load words
-                    loadWordsFromFirebase();
-                } else {
-                    console.log("User is signed out");
-                }
-            });
-        }
-
-        // Load words from Firebase
-        function loadWordsFromFirebase() {
-            const user = auth.currentUser;
-            if (!user) return;
-            
-            db.collection('users').doc(user.uid).collection('words')
-                .orderBy('dateAdded', 'desc')
-                .get()
-                .then((snapshot) => {
-                    if (snapshot.empty) {
-                        console.log('No words found in database');
-                        // If no words, use initial sample words
-                        addSampleWordsToFirebase();
-                        return;
-                    }
-                    
-                    // Clear existing words array
-                    words = [];
-                    
-                    // Add words from Firebase to the words array
-                    snapshot.forEach(doc => {
-                        const wordData = doc.data();
-                        words.push({
-                            id: doc.id,
-                            english: wordData.english,
-                            korean: wordData.korean,
-                            definition: wordData.definition,
-                            dateAdded: wordData.dateAdded
-                        });
-                    });
-                    
-                    // Render the updated word list
-                    renderWordList();
-                })
-                .catch((error) => {
-                    console.error("Error loading words:", error);
-                    // Fallback to localStorage
-                    words = JSON.parse(localStorage.getItem('vocabularyWords') || '[]');
-                    renderWordList();
-                });
-        }
-
-        // Add sample words to Firebase
-        function addSampleWordsToFirebase() {
-            const user = auth.currentUser;
-            if (!user) return;
-            
-            const sampleWords = [
-                {
-                    english: 'appreciate',
-                    korean: '감사하다',
-                    definition: 'Definition 1: to recognize the full worth of something\nSynonym: value, acknowledge\nExample: I appreciate your help\n\nDefinition 2: to increase in value\nSynonym: grow, rise\nExample: The property has appreciated over time',
-                    dateAdded: new Date().toISOString()
-                },
-                {
-                    english: 'refrigerator',
-                    korean: '냉장고',
-                    definition: 'Definition 1: an appliance for keeping food cold\nSynonym: fridge, cooler\nExample: The milk is in the refrigerator',
-                    dateAdded: new Date().toISOString()
-                }
-            ];
-            
-            // Add each sample word to Firebase
-            const batch = db.batch();
-            sampleWords.forEach((word) => {
-                const newWordRef = db.collection('users').doc(user.uid).collection('words').doc();
-                batch.set(newWordRef, word);
-            });
-            
-            // Commit the batch
-            batch.commit()
-                .then(() => {
-                    console.log("Sample words added to Firebase");
-                    loadWordsFromFirebase();
-                })
-                .catch((error) => {
-                    console.error("Error adding sample words:", error);
-                });
-        }
-
-        // Save word to Firebase
-        function saveWordToFirebase(word) {
-            const user = auth.currentUser;
-            if (!user) {
-                console.error("No user signed in");
-                return Promise.reject("No user signed in");
-            }
-            
-            if (word.id && typeof word.id === 'string' && word.id.length > 10) { // Existing Firebase word
-                // Update existing word
-                return db.collection('users').doc(user.uid).collection('words').doc(word.id)
-                    .update({
-                        english: word.english,
-                        korean: word.korean,
-                        definition: word.definition
-                    });
-            } else {
-                // New word
-                const wordData = {
-                    english: word.english,
-                    korean: word.korean,
-                    definition: word.definition,
-                    dateAdded: new Date().toISOString()
-                };
-                
-                return db.collection('users').doc(user.uid).collection('words').add(wordData)
-                    .then((docRef) => {
-                        word.id = docRef.id; // Update the word's ID with Firebase document ID
-                        return word;
-                    });
-            }
-        }
-
-        // Delete word from Firebase
-        function deleteWordFromFirebase(wordId) {
-            const user = auth.currentUser;
-            if (!user) return Promise.reject("No user signed in");
-            
-            return db.collection('users').doc(user.uid).collection('words').doc(wordId).delete();
-        }
-
         // WordsAPI Key
         const WORDS_API_KEY = "728032bd06msh52c0428ce9e3d15p1cd770jsn58b38971cf67";
         
         // Main app logic
         document.addEventListener('DOMContentLoaded', function() {
             // State management
-            let words = [];  // Initialize empty, will be loaded from Firebase
+            let words = JSON.parse(localStorage.getItem('vocabularyWords') || '[]');
             let currentView = 'list';
             let currentWordId = null;
             let studyIndex = 0;
             let studyWords = [];
             let isEditing = false;
+            
+            
 
             // Local dictionary data - a small sample for common words
             const localDictionary = {
@@ -400,6 +236,7 @@
             const searchInput = document.getElementById('search-input');
             const addButton = document.getElementById('add-button');
             const studyButton = document.getElementById('study-button');
+            
 
             // DOM elements - add view
             const englishInput = document.getElementById('english-input');
@@ -429,6 +266,23 @@
             const nextCardButton = document.getElementById('next-card');
             const exitStudyButton = document.getElementById('exit-study-button');
 
+            // DOM elements - export/import
+            const exportButton = document.createElement('button');
+            exportButton.id = 'export-button';
+exportButton.className = 'ml-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded';
+exportButton.textContent = 'Export Words';
+
+const importButton = document.createElement('button');
+importButton.id = 'import-button';
+importButton.className = 'ml-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded';
+importButton.textContent = 'Import Words';
+
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.id = 'file-input';
+fileInput.className = 'hidden';
+fileInput.accept = '.json';
+
             // Initialize the app
             initialize();
 
@@ -449,12 +303,61 @@
             editButton.addEventListener('click', editCurrentWord);
             
             // Functions
+
+            function setupExportImport() {
+    // Create a container for the export/import buttons
+    const exportImportContainer = document.createElement('div');
+    exportImportContainer.className = 'flex my-4';
+    
+    // Add the buttons to the container
+    exportImportContainer.appendChild(exportButton);
+    exportImportContainer.appendChild(importButton);
+    
+    // Add the container to the DOM (just below the search and add button)
+    const searchButtonContainer = document.querySelector('#list-view > div:first-child');
+    searchButtonContainer.parentNode.insertBefore(exportImportContainer, searchButtonContainer.nextSibling);
+    
+    // Add the hidden file input to the DOM
+    document.body.appendChild(fileInput);
+    
+    // Add event listeners
+    exportButton.addEventListener('click', exportWords);
+    importButton.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', importWords);
+}
+
             function initialize() {
-                // Set up authentication first, which will trigger word loading
-                setupAuth();
+                // Add sample words if none exist
+                if (words.length === 0) {
+                    words = [
+                        {
+                            id: 1,
+                            english: 'appreciate',
+                            korean: '감사하다',
+                            definition: 'Definition 1: to recognize the full worth of something\nSynonym: value, acknowledge\nExample: I appreciate your help\n\nDefinition 2: to increase in value\nSynonym: grow, rise\nExample: The property has appreciated over time',
+                            dateAdded: new Date().toISOString()
+                        },
+                        {
+                            id: 2,
+                            english: 'refrigerator',
+                            korean: '냉장고',
+                            definition: 'Definition 1: an appliance for keeping food cold\nSynonym: fridge, cooler\nExample: The milk is in the refrigerator',
+                            dateAdded: new Date().toISOString()
+                        }
+                    ];
+                    saveWordsToStorage();
+                }
+
+                // Render the word list
+                renderWordList();
                 
                 // Start at list view
                 showView('list');
+
+
+// Set up export/import buttons
+    setupExportImport();
+
             }
 
             function showView(viewName) {
@@ -522,6 +425,145 @@
                 showView('add');
             }
 
+
+
+
+
+
+
+
+function exportWords() {
+    // Get words from localStorage
+    const words = JSON.parse(localStorage.getItem('vocabularyWords') || '[]');
+    
+    if (words.length === 0) {
+        alert('No words to export!');
+        return;
+    }
+    
+    // Create a JSON string with formatting for readability
+    const wordsJson = JSON.stringify(words, null, 2);
+    
+    // Create a Blob with the JSON data
+    const blob = new Blob([wordsJson], { type: 'application/json' });
+    
+    // Create a download URL for the Blob
+    const url = URL.createObjectURL(blob);
+    
+    // Create a temporary anchor element to trigger the download
+    const a = document.createElement('a');
+    a.href = url;
+    
+    // Generate a filename with date
+    const date = new Date();
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    a.download = `vocabulary-words-${dateStr}.json`;
+    
+    // Append to the document, click to download, then remove
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    // Show a confirmation
+    alert(`Exported ${words.length} vocabulary words successfully!`);
+}
+
+function importWords(event) {
+    const file = event.target.files[0];
+    
+    if (!file) {
+        return; // No file selected
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        try {
+            // Parse the file content as JSON
+            const importedWords = JSON.parse(e.target.result);
+            
+            if (!Array.isArray(importedWords)) {
+                throw new Error('Invalid format: imported data is not an array');
+            }
+            
+            // Validate the structure of each word
+            const validWords = importedWords.filter(word => {
+                return word && 
+                       typeof word === 'object' && 
+                       word.id && 
+                       word.english && 
+                       typeof word.english === 'string';
+            });
+            
+            if (validWords.length === 0) {
+                throw new Error('No valid vocabulary words found in the file');
+            }
+            
+            // Confirm import
+            const confirmMessage = `Found ${validWords.length} words to import. This will replace your current words. Continue?`;
+            if (confirm(confirmMessage)) {
+                // Save to localStorage
+                localStorage.setItem('vocabularyWords', JSON.stringify(validWords));
+                
+                // Reload words and update the UI
+                words = validWords;
+                renderWordList();
+                
+                alert(`Successfully imported ${validWords.length} vocabulary words!`);
+            }
+        } catch (error) {
+            alert(`Error importing words: ${error.message}`);
+            console.error('Import error:', error);
+        }
+        
+        // Reset the file input
+        fileInput.value = '';
+    };
+    
+    reader.onerror = function() {
+        alert('Error reading the file');
+        // Reset the file input
+        fileInput.value = '';
+    };
+    
+    // Read the file as text
+    reader.readAsText(file);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             function saveWord() {
                 const english = englishInput.value.trim();
                 const korean = koreanInput.value.trim();
@@ -532,76 +574,40 @@
                     return;
                 }
                 
-                let wordToSave;
-                
                 if (isEditing) {
                     // Update existing word
                     const index = words.findIndex(w => w.id === currentWordId);
                     if (index !== -1) {
-                        wordToSave = {
+                        words[index] = {
                             ...words[index],
                             english,
                             korean,
-                            definition
+                            definition,
+                            dateAdded: words[index].dateAdded
                         };
                     }
                 } else {
                     // Add new word
-                    wordToSave = {
-                        id: Date.now().toString(), // Temporary ID until Firebase assigns a document ID
+                    const newWord = {
+                        id: Date.now(),
                         english,
                         korean,
                         definition,
                         dateAdded: new Date().toISOString()
                     };
+                    
+                    words.push(newWord);
                 }
                 
-                // Save to Firebase
-                saveWordToFirebase(wordToSave)
-                    .then(() => {
-                        // Reload words from Firebase
-                        loadWordsFromFirebase();
-                        // Go back to list view
-                        showListView();
-                    })
-                    .catch((error) => {
-                        console.error("Error saving word:", error);
-                        alert("Failed to save word. Check console for details.");
-                        
-                        // Fallback to localStorage
-                        if (isEditing) {
-                            const index = words.findIndex(w => w.id === currentWordId);
-                            if (index !== -1) {
-                                words[index] = wordToSave;
-                            }
-                        } else {
-                            words.push(wordToSave);
-                        }
-                        saveWordsToStorage();
-                        showListView();
-                    });
+                saveWordsToStorage();
+                showListView();
             }
 
             function deleteCurrentWord() {
                 if (confirm('Are you sure you want to delete this word?')) {
-                    deleteWordFromFirebase(currentWordId)
-                        .then(() => {
-                            // Remove from local array
-                            words = words.filter(w => w.id !== currentWordId);
-                            // Update localStorage as backup
-                            saveWordsToStorage();
-                            // Show list view
-                            showListView();
-                        })
-                        .catch((error) => {
-                            console.error("Error deleting word:", error);
-                            alert("Failed to delete word. Check console for details.");
-                            
-                            // Fallback to just removing from localStorage
-                            words = words.filter(w => w.id !== currentWordId);
-                            saveWordsToStorage();
-                            showListView();
-                        });
+                    words = words.filter(w => w.id !== currentWordId);
+                    saveWordsToStorage();
+                    showListView();
                 }
             }
 
@@ -765,7 +771,7 @@
                             if (result.examples && result.examples.length > 0) {
                                 formattedDef += result.examples[0];
                             } else {
-formattedDef += '(none available)';
+                                formattedDef += '(none available)';
                             }
                             
                             // Add to collection
