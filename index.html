@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>English-Korean Vocabulary Builder</title>
+    <title>The App</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <style>
         .word-card {
@@ -15,6 +15,11 @@
         #app {
             max-width: 500px;
             margin: 0 auto;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
         }
         .card-flip {
             perspective: 1000px;
@@ -43,35 +48,73 @@
         .definition-text {
             white-space: pre-line;
         }
+        .app-button {
+            width: 100%;
+            height: 3rem;
+        }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-100">
     <div id="app" class="p-4">
-        <header class="mb-6">
-            <h1 class="text-2xl font-bold text-center text-indigo-700">English-Korean Vocabulary Builder</h1>
-            <p class="text-center text-sm text-gray-600 mt-1">With dictionary lookup</p>
+        <header class="mb-6 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-indigo-700">The App</h1>
+            <div class="relative">
+                <button id="menu-button" class="text-gray-600 hover:text-gray-800 focus:outline-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <div id="menu-dropdown" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 hidden">
+                    <a href="#" id="word-list-option" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Word List</a>
+                    <a href="#" id="export-option" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export Words</a>
+                    <a href="#" id="import-option" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Import Words</a>
+                </div>
+            </div>
         </header>
 
         <div id="views">
             <!-- List View -->
             <div id="list-view" class="view">
-                <div class="flex mb-4">
-                    <input type="text" id="search-input" placeholder="Search words..." 
-                           class="flex-1 p-2 border rounded focus:outline-none focus:ring focus:border-blue-300">
-                    <button id="add-button" class="ml-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+                <!-- Main Add Word button - triple width, triple height -->
+                <div class="flex justify-center mb-10">
+                     <button id="add-button" style="width: 1200px;" class="bg-green-500 hover:bg-green-600 text-white py-8 text-xl font-bold rounded-lg shadow-md">
                         Add Word
-                    </button>
+                      </button>
                 </div>
 
-                <div class="flex mb-4">
-                    <button id="study-button" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded">
-                        Study Mode
-                    </button>
-                </div>
+		<div class="flex justify-center mb-6">
+    			<button id="study-button" style="width: 1200px;" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-8 text-xl font-bold rounded-lg shadow-md">
+        			Study Mode
+    			</button>
+		</div>
 
-                <div id="word-list" class="space-y-3">
+                <!-- Word list is hidden by default -->
+                <div id="word-list" class="space-y-3 hidden">
                     <!-- Words will be displayed here -->
-                    <div class="text-center text-gray-500 py-8">No words found. Add some vocabulary!</div>
+                </div>
+                
+                <!-- Small counter instead of welcome box -->
+                <div class="text-center text-sm text-gray-500 mt-4">
+                    <p>Words saved: <span id="word-count">0</span></p>
+                </div>
+            </div>
+
+            <!-- Word List View (separate from main view) -->
+            <div id="word-list-view" class="view hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Word List</h2>
+                    <button id="back-from-list-button" class="text-gray-400 hover:text-gray-600">
+                        ← Back
+                    </button>
+                </div>
+                
+                <div class="mb-4">
+                    <input type="text" id="list-search-input" placeholder="Search words..." 
+                           class="w-full p-2 border rounded focus:outline-none focus:ring focus:border-blue-300">
+                </div>
+                
+                <div id="word-list-container" class="space-y-3">
+                    <!-- Words will be displayed here in the separate list view -->
                 </div>
             </div>
 
@@ -180,6 +223,9 @@
         </div>
     </div>
 
+    <!-- Hidden file input for import functionality -->
+    <input type="file" id="file-input" class="hidden" accept=".json">
+
     <script>
         // WordsAPI Key
         const WORDS_API_KEY = "728032bd06msh52c0428ce9e3d15p1cd770jsn58b38971cf67";
@@ -193,8 +239,6 @@
             let studyIndex = 0;
             let studyWords = [];
             let isEditing = false;
-            
-            
 
             // Local dictionary data - a small sample for common words
             const localDictionary = {
@@ -227,16 +271,26 @@
 
             // DOM elements - views
             const listView = document.getElementById('list-view');
+            const wordListView = document.getElementById('word-list-view');
             const addView = document.getElementById('add-view');
             const detailView = document.getElementById('detail-view');
             const studyView = document.getElementById('study-view');
 
             // DOM elements - list view
             const wordList = document.getElementById('word-list');
-            const searchInput = document.getElementById('search-input');
+            const wordListContainer = document.getElementById('word-list-container');
+            const listSearchInput = document.getElementById('list-search-input');
             const addButton = document.getElementById('add-button');
             const studyButton = document.getElementById('study-button');
-            
+            const wordCount = document.getElementById('word-count');
+
+            // DOM elements - menu
+            const menuButton = document.getElementById('menu-button');
+            const menuDropdown = document.getElementById('menu-dropdown');
+            const wordListOption = document.getElementById('word-list-option');
+            const exportOption = document.getElementById('export-option');
+            const importOption = document.getElementById('import-option');
+            const backFromListButton = document.getElementById('back-from-list-button');
 
             // DOM elements - add view
             const englishInput = document.getElementById('english-input');
@@ -267,21 +321,7 @@
             const exitStudyButton = document.getElementById('exit-study-button');
 
             // DOM elements - export/import
-            const exportButton = document.createElement('button');
-            exportButton.id = 'export-button';
-exportButton.className = 'ml-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded';
-exportButton.textContent = 'Export Words';
-
-const importButton = document.createElement('button');
-importButton.id = 'import-button';
-importButton.className = 'ml-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded';
-importButton.textContent = 'Import Words';
-
-const fileInput = document.createElement('input');
-fileInput.type = 'file';
-fileInput.id = 'file-input';
-fileInput.className = 'hidden';
-fileInput.accept = '.json';
+            const fileInput = document.getElementById('file-input');
 
             // Initialize the app
             initialize();
@@ -291,8 +331,9 @@ fileInput.accept = '.json';
             cancelAddButton.addEventListener('click', showListView);
             saveButton.addEventListener('click', saveWord);
             backButton.addEventListener('click', showListView);
+            backFromListButton.addEventListener('click', showListView);
             deleteButton.addEventListener('click', deleteCurrentWord);
-            searchInput.addEventListener('input', renderWordList);
+            listSearchInput.addEventListener('input', () => renderWordListContainer(listSearchInput.value));
             studyButton.addEventListener('click', startStudyMode);
             flashcard.addEventListener('click', flipCard);
             prevCardButton.addEventListener('click', () => moveCard(-1));
@@ -302,30 +343,24 @@ fileInput.accept = '.json';
             lookupKoreanButton.addEventListener('click', lookupKoreanTranslation);
             editButton.addEventListener('click', editCurrentWord);
             
+            // Menu event listeners
+            menuButton.addEventListener('click', toggleMenu);
+            wordListOption.addEventListener('click', showWordListView);
+            exportOption.addEventListener('click', exportWords);
+            importOption.addEventListener('click', () => {
+                hideMenu();
+                fileInput.click();
+            });
+            fileInput.addEventListener('change', importWords);
+            
+            // Click outside to close menu
+            document.addEventListener('click', function(event) {
+                if (!menuButton.contains(event.target) && !menuDropdown.contains(event.target)) {
+                    hideMenu();
+                }
+            });
+            
             // Functions
-
-            function setupExportImport() {
-    // Create a container for the export/import buttons
-    const exportImportContainer = document.createElement('div');
-    exportImportContainer.className = 'flex my-4';
-    
-    // Add the buttons to the container
-    exportImportContainer.appendChild(exportButton);
-    exportImportContainer.appendChild(importButton);
-    
-    // Add the container to the DOM (just below the search and add button)
-    const searchButtonContainer = document.querySelector('#list-view > div:first-child');
-    searchButtonContainer.parentNode.insertBefore(exportImportContainer, searchButtonContainer.nextSibling);
-    
-    // Add the hidden file input to the DOM
-    document.body.appendChild(fileInput);
-    
-    // Add event listeners
-    exportButton.addEventListener('click', exportWords);
-    importButton.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', importWords);
-}
-
             function initialize() {
                 // Add sample words if none exist
                 if (words.length === 0) {
@@ -348,16 +383,26 @@ fileInput.accept = '.json';
                     saveWordsToStorage();
                 }
 
-                // Render the word list
+                // Update word count
+                updateWordCount();
+                
+                // Render the word list (hidden)
                 renderWordList();
                 
                 // Start at list view
                 showView('list');
-
-
-// Set up export/import buttons
-    setupExportImport();
-
+            }
+            
+            function updateWordCount() {
+                wordCount.textContent = words.length;
+            }
+            
+            function toggleMenu() {
+                menuDropdown.classList.toggle('hidden');
+            }
+            
+            function hideMenu() {
+                menuDropdown.classList.add('hidden');
             }
 
             function showView(viewName) {
@@ -365,6 +410,7 @@ fileInput.accept = '.json';
                 
                 // Hide all views
                 listView.classList.add('hidden');
+                wordListView.classList.add('hidden');
                 addView.classList.add('hidden');
                 detailView.classList.add('hidden');
                 studyView.classList.add('hidden');
@@ -372,6 +418,8 @@ fileInput.accept = '.json';
                 // Show selected view
                 if (viewName === 'list') {
                     listView.classList.remove('hidden');
+                } else if (viewName === 'wordList') {
+                    wordListView.classList.remove('hidden');
                 } else if (viewName === 'add') {
                     addView.classList.remove('hidden');
                 } else if (viewName === 'detail') {
@@ -384,7 +432,15 @@ fileInput.accept = '.json';
             function showListView() {
                 isEditing = false;
                 showView('list');
-                renderWordList();
+                hideMenu();
+                updateWordCount();
+            }
+            
+            function showWordListView(e) {
+                if (e) e.preventDefault();
+                renderWordListContainer();
+                showView('wordList');
+                hideMenu();
             }
 
             function showAddView() {
@@ -425,144 +481,108 @@ fileInput.accept = '.json';
                 showView('add');
             }
 
-
-
-
-
-
-
-
-function exportWords() {
-    // Get words from localStorage
-    const words = JSON.parse(localStorage.getItem('vocabularyWords') || '[]');
-    
-    if (words.length === 0) {
-        alert('No words to export!');
-        return;
-    }
-    
-    // Create a JSON string with formatting for readability
-    const wordsJson = JSON.stringify(words, null, 2);
-    
-    // Create a Blob with the JSON data
-    const blob = new Blob([wordsJson], { type: 'application/json' });
-    
-    // Create a download URL for the Blob
-    const url = URL.createObjectURL(blob);
-    
-    // Create a temporary anchor element to trigger the download
-    const a = document.createElement('a');
-    a.href = url;
-    
-    // Generate a filename with date
-    const date = new Date();
-    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
-    a.download = `vocabulary-words-${dateStr}.json`;
-    
-    // Append to the document, click to download, then remove
-    document.body.appendChild(a);
-    a.click();
-    
-    // Clean up
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    // Show a confirmation
-    alert(`Exported ${words.length} vocabulary words successfully!`);
-}
-
-function importWords(event) {
-    const file = event.target.files[0];
-    
-    if (!file) {
-        return; // No file selected
-    }
-    
-    const reader = new FileReader();
-    
-    reader.onload = function(e) {
-        try {
-            // Parse the file content as JSON
-            const importedWords = JSON.parse(e.target.result);
-            
-            if (!Array.isArray(importedWords)) {
-                throw new Error('Invalid format: imported data is not an array');
-            }
-            
-            // Validate the structure of each word
-            const validWords = importedWords.filter(word => {
-                return word && 
-                       typeof word === 'object' && 
-                       word.id && 
-                       word.english && 
-                       typeof word.english === 'string';
-            });
-            
-            if (validWords.length === 0) {
-                throw new Error('No valid vocabulary words found in the file');
-            }
-            
-            // Confirm import
-            const confirmMessage = `Found ${validWords.length} words to import. This will replace your current words. Continue?`;
-            if (confirm(confirmMessage)) {
-                // Save to localStorage
-                localStorage.setItem('vocabularyWords', JSON.stringify(validWords));
+            function exportWords() {
+                // Get words from localStorage
+                const words = JSON.parse(localStorage.getItem('vocabularyWords') || '[]');
                 
-                // Reload words and update the UI
-                words = validWords;
-                renderWordList();
+                if (words.length === 0) {
+                    alert('No words to export!');
+                    return;
+                }
                 
-                alert(`Successfully imported ${validWords.length} vocabulary words!`);
+                // Create a JSON string with formatting for readability
+                const wordsJson = JSON.stringify(words, null, 2);
+                
+                // Create a Blob with the JSON data
+                const blob = new Blob([wordsJson], { type: 'application/json' });
+                
+                // Create a download URL for the Blob
+                const url = URL.createObjectURL(blob);
+                
+                // Create a temporary anchor element to trigger the download
+                const a = document.createElement('a');
+                a.href = url;
+                
+                // Generate a filename with date
+                const date = new Date();
+                const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+                a.download = `vocabulary-words-${dateStr}.json`;
+                
+                // Append to the document, click to download, then remove
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                hideMenu();
+                
+                // Show a confirmation
+                alert(`Exported ${words.length} vocabulary words successfully!`);
             }
-        } catch (error) {
-            alert(`Error importing words: ${error.message}`);
-            console.error('Import error:', error);
-        }
-        
-        // Reset the file input
-        fileInput.value = '';
-    };
-    
-    reader.onerror = function() {
-        alert('Error reading the file');
-        // Reset the file input
-        fileInput.value = '';
-    };
-    
-    // Read the file as text
-    reader.readAsText(file);
-}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            function importWords(event) {
+                const file = event.target.files[0];
+                
+                if (!file) {
+                    return; // No file selected
+                }
+                
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        // Parse the file content as JSON
+                        const importedWords = JSON.parse(e.target.result);
+                        
+                        if (!Array.isArray(importedWords)) {
+                            throw new Error('Invalid format: imported data is not an array');
+                        }
+                        
+                        // Validate the structure of each word
+                        const validWords = importedWords.filter(word => {
+                            return word && 
+                                   typeof word === 'object' && 
+                                   word.id && 
+                                   word.english && 
+                                   typeof word.english === 'string';
+                        });
+                        
+                        if (validWords.length === 0) {
+                            throw new Error('No valid vocabulary words found in the file');
+                        }
+                        
+                        // Confirm import
+                        const confirmMessage = `Found ${validWords.length} words to import. This will replace your current words. Continue?`;
+                        if (confirm(confirmMessage)) {
+                            // Save to localStorage
+                            localStorage.setItem('vocabularyWords', JSON.stringify(validWords));
+                            
+                            // Reload words and update the UI
+                            words = validWords;
+                            renderWordList();
+                            updateWordCount();
+                            
+                            alert(`Successfully imported ${validWords.length} vocabulary words!`);
+                        }
+                    } catch (error) {
+                        alert(`Error importing words: ${error.message}`);
+                        console.error('Import error:', error);
+                    }
+                    
+                    // Reset the file input
+                    fileInput.value = '';
+                };
+                
+                reader.onerror = function() {
+                    alert('Error reading the file');
+                    // Reset the file input
+                    fileInput.value = '';
+                };
+                
+                // Read the file as text
+                reader.readAsText(file);
+            }
 
             function saveWord() {
                 const english = englishInput.value.trim();
@@ -572,6 +592,35 @@ function importWords(event) {
                 if (!english) {
                     alert('English word is required!');
                     return;
+                }
+                
+                // Check if word already exists
+                const existingWordIndex = words.findIndex(word => 
+                    word.english.toLowerCase() === english.toLowerCase() && 
+                    (!isEditing || word.id !== currentWordId)
+                );
+                
+                if (existingWordIndex !== -1) {
+                    const existingWord = words[existingWordIndex];
+                    const confirmMessage = `The word "${english}" already exists in your vocabulary. Do you want to update it?`;
+                    
+                    if (confirm(confirmMessage)) {
+                        // Update the existing word
+                        words[existingWordIndex] = {
+                            ...existingWord,
+                            korean,
+                            definition,
+                            dateAdded: new Date().toISOString() // Update date
+                        };
+                        
+                        saveWordsToStorage();
+                        showListView();
+                        updateWordCount();
+                        return;
+                    } else {
+                        // User canceled, stay on add view
+                        return;
+                    }
                 }
                 
                 if (isEditing) {
@@ -601,6 +650,7 @@ function importWords(event) {
                 
                 saveWordsToStorage();
                 showListView();
+                updateWordCount();
             }
 
             function deleteCurrentWord() {
@@ -608,6 +658,7 @@ function importWords(event) {
                     words = words.filter(w => w.id !== currentWordId);
                     saveWordsToStorage();
                     showListView();
+                    updateWordCount();
                 }
             }
 
@@ -616,7 +667,13 @@ function importWords(event) {
             }
 
             function renderWordList() {
-                const searchTerm = searchInput.value.toLowerCase();
+                // This function still exists but since the list is hidden, it doesn't need to do much
+                // We'll keep it for backward compatibility
+                wordList.innerHTML = '';
+            }
+            
+            function renderWordListContainer(searchTermParam) {
+                const searchTerm = (searchTermParam || listSearchInput.value || '').toLowerCase();
                 
                 // Filter words based on search term
                 const filteredWords = words.filter(word => {
@@ -629,7 +686,7 @@ function importWords(event) {
                 filteredWords.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
                 
                 // Clear the list
-                wordList.innerHTML = '';
+                wordListContainer.innerHTML = '';
                 
                 // Add word cards
                 if (filteredWords.length > 0) {
@@ -659,14 +716,14 @@ function importWords(event) {
                             <p class="text-sm text-gray-600 truncate">${shortDefinition}</p>
                         `;
                         
-                        wordList.appendChild(card);
+                        wordListContainer.appendChild(card);
                     });
                 } else {
                     // Show empty state
                     const emptyState = document.createElement('div');
                     emptyState.className = 'text-center text-gray-500 py-8';
                     emptyState.textContent = 'No words found. Add some vocabulary!';
-                    wordList.appendChild(emptyState);
+                    wordListContainer.appendChild(emptyState);
                 }
             }
 
@@ -719,7 +776,7 @@ function importWords(event) {
                 studyIndex = Math.max(0, Math.min(studyIndex + direction, studyWords.length - 1));
                 updateStudyCard();
             }
-            
+
             // Dictionary lookup functions
             async function lookupEnglishWord() {
                 const word = englishInput.value.trim().toLowerCase();
