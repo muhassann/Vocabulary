@@ -13,9 +13,11 @@
             transform: translateY(-3px);
         }
         #app {
-            max-width: 500px;
-            margin: 0 auto;
-        }
+ 	   max-width: 100%; /* Instead of a fixed width */
+	    padding: 0 15px; /* Add some padding on the sides */
+  	    margin: 0 auto;
+  	    box-sizing: border-box; /* This ensures padding is included in width */
+         }
         body {
             display: flex;
             justify-content: center;
@@ -56,8 +58,8 @@
 </head>
 <body class="bg-gray-100">
     <div id="app" class="p-4">
-        <header class="mb-6 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-indigo-700">The App</h1>
+        <header class="mb-6 flex justify-between items-center w-full">
+         <h1 class="text-2xl font-bold text-indigo-700">The App</h1>
             <div class="relative">
                 <button id="menu-button" class="text-gray-600 hover:text-gray-800 focus:outline-none">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -77,13 +79,13 @@
             <div id="list-view" class="view">
                 <!-- Main Add Word button - triple width, triple height -->
                 <div class="flex justify-center mb-10">
-                     <button id="add-button" style="width: 20vw;" class="bg-green-500 hover:bg-green-600 text-white py-8 text-xl font-bold rounded-lg shadow-md">
+                     <button id="add-button" style="width: 60vw;" class="bg-green-500 hover:bg-green-600 text-white py-8 text-xl font-bold rounded-lg shadow-md">
                         Add Word
                       </button>
                 </div>
 
 		<div class="flex justify-center mb-6">
-    			<button id="study-button" style="width: 1200px;" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-8 text-xl font-bold rounded-lg shadow-md">
+    			<button id="study-button" style="width: 60vw;" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-8 text-xl font-bold rounded-lg shadow-md">
         			Study Mode
     			</button>
 		</div>
